@@ -5,6 +5,18 @@
 
 #include <stdio.h>
 
+// nvcc does not seem to like variadic macros, so we have to define
+// one for each kernel parameter list:
+#ifdef __CUDACC__
+#define KERNEL_ARGS2(grid, block) <<< grid, block >>>
+#define KERNEL_ARGS3(grid, block, sh_mem) <<< grid, block, sh_mem >>>
+#define KERNEL_ARGS4(grid, block, sh_mem, stream) <<< grid, block, sh_mem, stream >>>
+#else
+#define KERNEL_ARGS2(grid, block)
+#define KERNEL_ARGS3(grid, block, sh_mem)
+#define KERNEL_ARGS4(grid, block, sh_mem, stream)
+#endif
+
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
 __global__ void addKernel(int *c, const int *a, const int *b)
@@ -108,7 +120,7 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
     }
 
     // Launch a kernel on the GPU with one thread for each element.
-    addKernel<<<1, size>>>(dev_c, dev_a, dev_b);
+    addKernel KERNEL_ARGS2(1, size) (dev_c, dev_a, dev_b);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
