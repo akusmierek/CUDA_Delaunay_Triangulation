@@ -40,10 +40,12 @@ __device__ bool circumCircleContains(const float2 a, const float2 b, const float
 	return dist <= circum_radius;
 }
 
-__global__ void reserveVerticesDevice(float2* verticesToAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum)
+__global__ void reserveVerticesDevice(int* verticesToAdd, bool* canAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum)
 {
 	for (int i = 0; i < verticesToAddNum; i++)
 	{
+		int vertexToAddId = verticesToAdd[i];
+		float2 vertexToAdd = allVertices[vertexToAddId];
 		for (int j = 0; j < trianglesNum; j += 3)
 		{
 			int a_id = triangles[j];
@@ -53,17 +55,48 @@ __global__ void reserveVerticesDevice(float2* verticesToAdd, int verticesToAddNu
 			float2 b = allVertices[b_id];
 			float2 c = allVertices[c_id];
 
-			if (circumCircleContains(a, b, c, verticesToAdd[i]))
+			if (circumCircleContains(a, b, c, vertexToAdd))
 			{
-				atomicMax(&verticesReservations[a_id], i);
-				atomicMax(&verticesReservations[b_id], i);
-				atomicMax(&verticesReservations[c_id], i);
+				atomicMax(&verticesReservations[a_id], vertexToAddId);
+				atomicMax(&verticesReservations[b_id], vertexToAddId);
+				atomicMax(&verticesReservations[c_id], vertexToAddId);
+			}
+		}
+	}
+
+	// I hope it can be done better than calculating the same thing 2 times...
+	__syncthreads();
+
+	for (int i = 0; i < verticesToAddNum; i++)
+	{
+		int vertexToAddId = verticesToAdd[i];
+		float2 vertexToAdd = allVertices[vertexToAddId];
+		for (int j = 0; j < trianglesNum; j += 3)
+		{
+			int a_id = triangles[j];
+			int b_id = triangles[j + 1];
+			int c_id = triangles[j + 2];
+			float2 a = allVertices[a_id];
+			float2 b = allVertices[b_id];
+			float2 c = allVertices[c_id];
+
+			if (circumCircleContains(a, b, c, vertexToAdd))
+			{
+				if (verticesReservations[a_id] != vertexToAddId ||
+					verticesReservations[b_id] != vertexToAddId ||
+					verticesReservations[b_id] != vertexToAddId)
+				{
+					canAdd[i] = false;
+					break;
+				}
+
+				canAdd[i] = true;
 			}
 		}
 	}
 }
 
-void reserveVertices(float2* verticesToAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum)
+void reserveVertices(int* verticesToAdd, bool* canAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum)
 {
 	// Print data for tests
 
@@ -79,17 +112,20 @@ void reserveVertices(float2* verticesToAdd, int verticesToAddNum, int* triangles
 	for (int i = 0; i < allVerticesNum; i++)
 		printf("(%f, %f)\n", allVertices[i].x, allVertices[i].y);*/
 
-	float2* d_verticesToAdd;
+	int* d_verticesToAdd;
+	bool* d_canAdd;
 	int* d_triangles;
 	float2* d_allVertices;
 	int* d_verticesReservations;
 
-	size_t verticesToAddSize = sizeof(float2) * verticesToAddNum;
+	size_t verticesToAddSize = sizeof(int) * verticesToAddNum;
+	size_t canAddSize = sizeof(bool) * verticesToAddNum;
 	size_t trianglesSize = sizeof(int) * trianglesNum;
 	size_t allVerticesSize = sizeof(float2) * allVerticesNum;
 	size_t verticesReservationsSize = sizeof(int) * allVerticesNum;
 
 	cudaMalloc(&d_verticesToAdd, verticesToAddSize);
+	cudaMalloc(&d_canAdd, canAddSize);
 	cudaMalloc(&d_triangles, trianglesSize);
 	cudaMalloc(&d_allVertices, allVerticesSize);
 	cudaMalloc(&d_verticesReservations, verticesReservationsSize);
@@ -98,15 +134,21 @@ void reserveVertices(float2* verticesToAdd, int verticesToAddNum, int* triangles
 	cudaMemcpy(d_triangles, triangles, trianglesSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_allVertices, allVertices, allVerticesSize, cudaMemcpyHostToDevice);
 
-	reserveVerticesDevice KERNEL_ARGS2(1, 1)(d_verticesToAdd, verticesToAddNum, d_triangles, trianglesNum, d_allVertices, d_verticesReservations, allVerticesNum);
+	reserveVerticesDevice KERNEL_ARGS2(1, 1)(d_verticesToAdd, d_canAdd, verticesToAddNum, d_triangles, trianglesNum, d_allVertices, d_verticesReservations, allVerticesNum);
 
 	cudaMemcpy(verticesReservations, d_verticesReservations, verticesReservationsSize, cudaMemcpyDeviceToHost);
+	cudaMemcpy(canAdd, d_canAdd, canAddSize, cudaMemcpyDeviceToHost);
 
 	// Print results for tests
 
 	printf("Vertices reservations:\n");
 	for (int i = 0; i < allVerticesNum; i++)
 		printf("%d: %d\n", i, verticesReservations[i]);
+}
+
+void insertVertices()
+{
+
 }
 
 namespace dtc
@@ -137,16 +179,19 @@ namespace dtc
 		const float midx = (minX + maxX) / 2;
 		const float midy = (minY + maxY) / 2;
 
-		const VertexType p1 = make_float2(midx - 20 * deltaMax, midy - deltaMax);
-		const VertexType p2 = make_float2(midx, midy + 20 * deltaMax);
-		const VertexType p3 = make_float2(midx + 20 * deltaMax, midy - deltaMax);
+		VertexType p1 = make_float2(midx - 20 * deltaMax, midy - deltaMax);
+		VertexType p2 = make_float2(midx, midy + 20 * deltaMax);
+		VertexType p3 = make_float2(midx + 20 * deltaMax, midy - deltaMax);
 
 		// 3 last vertices are super triangle
 		int p1_id = vertices.size();
 		int p2_id = vertices.size() + 1;
 		int p3_id = vertices.size() + 2;
 
-		auto verticesToAdd = vertices;
+		// verticesToAdd contains ids of the vertices - not actual float2 position
+		std::vector<int> verticesToAdd(vertices.size());
+		for (int i = 0; i < vertices.size(); i++)
+			verticesToAdd[i] = i;
 
 		_vertices.push_back(p1);
 		_vertices.push_back(p2);
@@ -164,10 +209,102 @@ namespace dtc
 		}
 
 		int* verticesReservations = new int[_vertices.size()];
+		std::fill_n(verticesReservations, _vertices.size(), -1);
 
-		reserveVertices(&verticesToAdd[0], verticesToAdd.size(), &triangles[0], triangles.size(), &_vertices[0], verticesReservations, _vertices.size());
+		bool* canAdd = new bool[_vertices.size()];
 
-		// Add vertices from verticesReservations, make new triangles and do flip-edge for every (new?) triangle
+		reserveVertices(&verticesToAdd[0], canAdd, verticesToAdd.size(), &triangles[0], triangles.size(), &_vertices[0], verticesReservations, _vertices.size());
+		
+		// TODO: WAIT FOR THE RESULTS!
+		//insertVertices();
+
+		// Maybe it would be better to make reservations on triangles-like array?
+		for (int i = 0; i < verticesToAdd.size(); i++)
+		{
+			// has vertex access to all affected triangles?
+			if (!canAdd[i])
+				continue;
+
+			// get all reservations
+			int vertexToAdd = verticesToAdd[i];
+			std::vector<int> reservations;
+			for (int j = 0; j < _vertices.size(); j++)
+			{
+				int vertex = verticesReservations[j];
+				if (vertex == vertexToAdd)
+					reservations.push_back(j);
+			}
+
+			// create polygon
+			std::vector<Edge> polygon;
+			for (int i = 0; i < triangles.size(); i += 3)
+			{
+				bool isReservedA = false;
+				bool isReservedB = false;
+				bool isReservedC = false;
+				int a = triangles[i];
+				int b = triangles[i + 1];
+				int c = triangles[i + 2];
+				
+				for (int j = 0; j < reservations.size(); j++)
+				{
+					if (reservations[j] == a)
+						isReservedA = true;
+					if (reservations[j] == b)
+						isReservedB = true;
+					if (reservations[j] == c)
+						isReservedC = true;
+				}
+
+				if (isReservedA && isReservedB && isReservedC)
+				{
+					polygon.push_back(Edge{_vertices[a], _vertices[b], a, b});
+					polygon.push_back(Edge{_vertices[b], _vertices[c], b, c});
+					polygon.push_back(Edge{_vertices[c], _vertices[a], c, a});
+				}
+			}
+
+			for (auto e1 = polygon.begin(); e1 != polygon.end(); ++e1)
+			{
+				for (auto e2 = e1 + 1; e2 != polygon.end(); ++e2)
+				{
+					if (almost_equal(*e1, *e2))
+					{
+						e1->isBad = true;
+						e2->isBad = true;
+					}
+				}
+			}
+
+			polygon.erase(
+				std::remove_if(polygon.begin(), polygon.end(),
+							   [](Edge& e) {
+								   return e.isBad;
+							   }), end(polygon));
+
+			for (const auto edge : polygon)
+				_triangles.push_back(Triangle(*edge.v, *edge.w, _vertices[vertexToAdd], edge.v_id, edge.w_id, vertexToAdd));
+		}
+
+		/*_triangles.erase(
+			std::remove_if(_triangles.begin(), _triangles.end(),
+							[p1, p2, p3](Triangle& t) {
+								return t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
+							}), _triangles.end());*/
+
+		for (const auto triangle : _triangles)
+		{
+			_edges.push_back(Edge(*triangle.a, * triangle.b, triangle.a_id, triangle.b_id));
+			_edges.push_back(Edge(*triangle.b, * triangle.c, triangle.b_id, triangle.c_id));
+			_edges.push_back(Edge(*triangle.c, * triangle.a, triangle.c_id, triangle.a_id));
+		}
+		// if (canAdd[i])
+		//   get polygon
+		//   make triangles from polygon edges and added vertex
+
+		// Vertex can be inserted ONLY if all affected triangles have its id.
+			// So it has to be checked in reserveVertices probably
+		// Insert vertices on host as I don't have any idea how to make it faster on device as we have to insert new triangles (creating new objects dynamically)
 		// Remove added vertices and repeat the process for not yet added vertices
 
 		/*for (auto vertex = vertices.begin(); vertex != vertices.end(); vertex++)

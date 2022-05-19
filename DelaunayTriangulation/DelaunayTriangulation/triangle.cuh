@@ -13,26 +13,26 @@ namespace dtc
 		using VertexType = float2;
 		using EdgeType = Edge;
 
-		Triangle() = default;
+		/*Triangle(){}
 		Triangle(const Triangle&) = default;
-		Triangle(Triangle&&) = default;
-		Triangle(const VertexType& v1, const VertexType& v2, const VertexType& v3, const int v1_id, const int v2_id, const int v3_id);
+		Triangle(Triangle&&) = default;*/
+		Triangle(VertexType& v1, VertexType& v2, VertexType& v3, int v1_id, int v2_id, int v3_id);
 
 		bool containsVertex(const VertexType& v) const;
 		bool circumCircleContains(const VertexType& v) const;
 
-		Triangle& operator=(const Triangle&) = default;
-		Triangle& operator=(Triangle&&) = default;
+		//Triangle& operator=(const Triangle&) = default;
+		//Triangle& operator=(Triangle&&) = default;
 		bool operator ==(const Triangle& t) const;
 
 		friend std::ostream& operator <<(std::ostream& str, const Triangle& t);
 
-		const VertexType* a;
-		const VertexType* b;
-		const VertexType* c;
-		const int a_id;
-		const int b_id;
-		const int c_id;
+		VertexType* a = nullptr;
+		VertexType* b = nullptr;
+		VertexType* c = nullptr;
+		int a_id = 0;
+		int b_id = 0;
+		int c_id = 0;
 		bool isBad = false;
 	};
 

@@ -2,8 +2,8 @@
 
 namespace dtc
 {
-	Edge::Edge(const VertexType& v1, const VertexType& v2) :
-		v(&v1), w(&v2)
+	Edge::Edge(VertexType& v1, VertexType& v2, int v1_id, int v2_id) :
+		v(&v1), w(&v2), v_id(v1_id), w_id(v2_id)
 	{
 	}
 
@@ -22,8 +22,10 @@ namespace dtc
 	bool
 		Edge::operator ==(const Edge& e) const
 	{
-		return (*(this->v) == *e.v && *(this->w) == *e.w) ||
-			(*(this->v) == *e.w && *(this->w) == *e.v);
+		return this->v_id == e.v_id && this->w_id == e.w_id ||
+			this->v_id == e.w_id && this->w_id == e.v_id;
+		/*return (*(this->v) == *e.v && *(this->w) == *e.w) ||
+			(*(this->v) == *e.w && *(this->w) == *e.v);*/
 	}
 
 	std::ostream&

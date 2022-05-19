@@ -2,7 +2,7 @@
 
 namespace dtc
 {
-	Triangle::Triangle(const VertexType& v1, const VertexType& v2, const VertexType& v3, const int v1_id, const int v2_id, const int v3_id) :
+	Triangle::Triangle(VertexType& v1, VertexType& v2, VertexType& v3, int v1_id, int v2_id, int v3_id) :
 		a(&v1), b(&v2), c(&v3), a_id(v1_id), b_id(v2_id), c_id(v3_id), isBad(false)
 	{
 	}

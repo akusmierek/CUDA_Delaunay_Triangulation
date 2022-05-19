@@ -60,7 +60,7 @@ int main()
     points.push_back(dt::Vector2<float>{0, 2});
     points.push_back(dt::Vector2<float>{1, 0});
     points.push_back(dt::Vector2<float>{0, -2});
-    points.push_back(dt::Vector2<float>{-1, 0});
+    points.push_back(dt::Vector2<float>{-10, 0});
     points.push_back(dt::Vector2<float>{2, 2});
 
     dt::Delaunay<float> triangulation;

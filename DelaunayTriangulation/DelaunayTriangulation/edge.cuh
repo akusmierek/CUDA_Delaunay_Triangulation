@@ -10,21 +10,23 @@ namespace dtc
 		using Type = float;
 		using VertexType = float2;
 
-		Edge() = default;
+		/*Edge(){}
 		Edge(const Edge&) = default;
-		Edge(Edge&&) = default;
-		Edge(const VertexType& v1, const VertexType& v2);
+		Edge(Edge&&) = default;*/
+		Edge(VertexType& v1, VertexType& v2, int v1_id, int v2_id);
 
-		Edge& operator=(const Edge&) = default;
-		Edge& operator=(Edge&&) = default;
+		/*Edge& operator=(const Edge&){};
+		Edge& operator=(Edge&&) = default;*/
 		bool operator ==(const Edge& e) const;
 
 		friend bool operator ==(const float2& lhs, const float2& rhs);
 		friend std::ostream& operator <<(std::ostream& str, const float2& v);
 		friend std::ostream& operator <<(std::ostream& str, const Edge& e);
 
-		const VertexType* v;
-		const VertexType* w;
+		VertexType* v = nullptr;
+		VertexType* w = nullptr;
+		int v_id = 0;
+		int w_id = 0;
 		bool isBad = false;
 	};
 
