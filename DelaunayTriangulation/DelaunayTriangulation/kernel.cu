@@ -4,6 +4,7 @@
 #include "delaunay.h"
 
 #include <stdio.h>
+#include "delaunayCuda.cuh"
 
 // nvcc does not seem to like variadic macros, so we have to define
 // one for each kernel parameter list:
@@ -18,6 +19,7 @@
 #endif
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
+cudaError_t triangulateWithCuda();
 
 __global__ void addKernel(int *c, const int *a, const int *b)
 {
@@ -54,19 +56,41 @@ int main()
     ///////////////////
     // TRIANGULATION //
     ///////////////////
-    std::vector<dt::Vector2<double>> points;
-    points.push_back(dt::Vector2<double>{0, 2});
-    points.push_back(dt::Vector2<double>{1, 0});
-    points.push_back(dt::Vector2<double>{0, -2});
-    points.push_back(dt::Vector2<double>{-1, 0});
-    points.push_back(dt::Vector2<double>{2, 2});
+    std::vector<dt::Vector2<float>> points;
+    points.push_back(dt::Vector2<float>{0, 2});
+    points.push_back(dt::Vector2<float>{1, 0});
+    points.push_back(dt::Vector2<float>{0, -2});
+    points.push_back(dt::Vector2<float>{-1, 0});
+    points.push_back(dt::Vector2<float>{2, 2});
 
-    dt::Delaunay<double> triangulation;
-    const std::vector<dt::Triangle<double>> triangles = triangulation.triangulate(points);
-    const std::vector<dt::Edge<double>> edges = triangulation.getEdges();
+    dt::Delaunay<float> triangulation;
+    const std::vector<dt::Triangle<float>> triangles = triangulation.triangulate(points);
+    const std::vector<dt::Edge<float>> edges = triangulation.getEdges();
     for (const auto& e : edges)
     {
         printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
+    }
+
+    std::vector<float2> cudaPoints;
+    cudaPoints.push_back(make_float2(0, 2));
+    cudaPoints.push_back(make_float2(1, 0));
+    cudaPoints.push_back(make_float2(0, -2));
+    cudaPoints.push_back(make_float2(-1, 0));
+    cudaPoints.push_back(make_float2(2, 2));
+
+    dtc::DelaunayCuda triangulationCuda;
+    const std::vector<dtc::Triangle> trianglesCuda = triangulationCuda.triangulate(cudaPoints);
+    const std::vector<dtc::Edge> edgesCuda = triangulationCuda.getEdges();
+    for (const auto& e : edgesCuda)
+    {
+        printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
+    }
+
+    cudaError_t triangulationCudaStatus = triangulateWithCuda();
+    if (triangulationCudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "triangulationWithCuda failed!");
+        return 1;
     }
 
     return 0;
@@ -149,5 +173,12 @@ Error:
     cudaFree(dev_a);
     cudaFree(dev_b);
     
+    return cudaStatus;
+}
+
+cudaError_t triangulateWithCuda()
+{
+    cudaError_t cudaStatus;
+    cudaStatus = cudaSetDevice(0);
     return cudaStatus;
 }

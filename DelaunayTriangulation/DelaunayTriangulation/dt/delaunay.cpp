@@ -36,18 +36,18 @@ namespace dt
 		// Create a list of triangles, and add the supertriangle in it
 		_triangles.push_back(TriangleType(p1, p2, p3));
 
-		for (auto p = vertices.begin(); p != vertices.end(); p++)
+		for (auto vertex = vertices.begin(); vertex != vertices.end(); vertex++)
 		{
 			std::vector<EdgeType> polygon;
 
-			for (auto& t : _triangles)
+			for (auto& triangle : _triangles)
 			{
-				if (t.circumCircleContains(*p))
+				if (triangle.circumCircleContains(*vertex))
 				{
-					t.isBad = true;
-					polygon.push_back(Edge<T>{*t.a, * t.b});
-					polygon.push_back(Edge<T>{*t.b, * t.c});
-					polygon.push_back(Edge<T>{*t.c, * t.a});
+					triangle.isBad = true;
+					polygon.push_back(Edge<T>{*triangle.a, * triangle.b});
+					polygon.push_back(Edge<T>{*triangle.b, * triangle.c});
+					polygon.push_back(Edge<T>{*triangle.c, * triangle.a});
 				}
 			}
 
@@ -55,7 +55,7 @@ namespace dt
 				std::remove_if(_triangles.begin(), _triangles.end(),
 							   [](TriangleType& t) {
 								   return t.isBad;
-							   }), end(_triangles));
+							   }), _triangles.end());
 
 			for (auto e1 = polygon.begin(); e1 != polygon.end(); ++e1)
 			{
@@ -75,22 +75,21 @@ namespace dt
 								   return e.isBad;
 							   }), end(polygon));
 
-			for (const auto e : polygon)
-				_triangles.push_back(TriangleType(*e.v, *e.w, *p));
-
+			for (const auto edge : polygon)
+				_triangles.push_back(TriangleType(*edge.v, *edge.w, *vertex));
 		}
 
 		_triangles.erase(
 			std::remove_if(_triangles.begin(), _triangles.end(),
 						   [p1, p2, p3](TriangleType& t) {
 							   return t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
-						   }), end(_triangles));
+						   }), _triangles.end());
 
-		for (const auto t : _triangles)
+		for (const auto triangle : _triangles)
 		{
-			_edges.push_back(Edge<T>{*t.a, * t.b});
-			_edges.push_back(Edge<T>{*t.b, * t.c});
-			_edges.push_back(Edge<T>{*t.c, * t.a});
+			_edges.push_back(Edge<T>{*triangle.a, * triangle.b});
+			_edges.push_back(Edge<T>{*triangle.b, * triangle.c});
+			_edges.push_back(Edge<T>{*triangle.c, * triangle.a});
 		}
 
 		return _triangles;

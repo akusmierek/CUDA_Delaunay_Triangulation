@@ -79,7 +79,10 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <CudaCompile Include="delaunayCuda.cu" />
+    <CudaCompile Include="edge.cu" />
     <CudaCompile Include="kernel.cu" />
+    <CudaCompile Include="triangle.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dt\delaunay.cpp" />
@@ -88,11 +91,14 @@
     <ClCompile Include="dt\vector2.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="delaunayCuda.cuh" />
+    <ClInclude Include="edge.cuh" />
     <ClInclude Include="include\delaunay.h" />
     <ClInclude Include="include\edge.h" />
     <ClInclude Include="include\numeric.h" />
     <ClInclude Include="include\triangle.h" />
     <ClInclude Include="include\vector2.h" />
+    <ClInclude Include="triangle.cuh" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

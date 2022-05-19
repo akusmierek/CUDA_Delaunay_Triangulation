@@ -2,6 +2,9 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <CudaCompile Include="kernel.cu" />
+    <CudaCompile Include="delaunayCuda.cu" />
+    <CudaCompile Include="edge.cu" />
+    <CudaCompile Include="triangle.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dt\delaunay.cpp" />
@@ -15,5 +18,8 @@
     <ClInclude Include="include\numeric.h" />
     <ClInclude Include="include\triangle.h" />
     <ClInclude Include="include\vector2.h" />
+    <ClInclude Include="delaunayCuda.cuh" />
+    <ClInclude Include="edge.cuh" />
+    <ClInclude Include="triangle.cuh" />
   </ItemGroup>
 </Project>
