@@ -102,6 +102,8 @@ void reserveVertices(float2* verticesToAdd, int verticesToAddNum, int* triangles
 
 	cudaMemcpy(verticesReservations, d_verticesReservations, verticesReservationsSize, cudaMemcpyDeviceToHost);
 
+	// Print results for tests
+
 	printf("Vertices reservations:\n");
 	for (int i = 0; i < allVerticesNum; i++)
 		printf("%d: %d\n", i, verticesReservations[i]);
@@ -164,6 +166,9 @@ namespace dtc
 		int* verticesReservations = new int[_vertices.size()];
 
 		reserveVertices(&verticesToAdd[0], verticesToAdd.size(), &triangles[0], triangles.size(), &_vertices[0], verticesReservations, _vertices.size());
+
+		// Add vertices from verticesReservations, make new triangles and do flip-edge for every (new?) triangle
+		// Remove added vertices and repeat the process for not yet added vertices
 
 		/*for (auto vertex = vertices.begin(); vertex != vertices.end(); vertex++)
 		{
