@@ -40,7 +40,10 @@ __device__ bool circumCircleContains(const float2 a, const float2 b, const float
 	return dist <= circum_radius;
 }
 
-__global__ void reserveVerticesDevice(int* verticesToAdd, bool* canAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum)
+__global__ void reserveVerticesDevice(
+	int* verticesToAdd, bool* canAdd, int verticesToAddNum,
+	int* triangles, int* trianglesReservations, int trianglesNum,
+	float2* allVertices, int* verticesReservations, int allVerticesNum)
 {
 	for (int i = 0; i < verticesToAddNum; i++)
 	{
@@ -84,19 +87,25 @@ __global__ void reserveVerticesDevice(int* verticesToAdd, bool* canAdd, int vert
 			{
 				if (verticesReservations[a_id] != vertexToAddId ||
 					verticesReservations[b_id] != vertexToAddId ||
-					verticesReservations[b_id] != vertexToAddId)
+					verticesReservations[c_id] != vertexToAddId)
 				{
 					canAdd[i] = false;
 					break;
 				}
 
 				canAdd[i] = true;
+				trianglesReservations[j] = vertexToAddId;
+				trianglesReservations[j + 1] = vertexToAddId;
+				trianglesReservations[j + 2] = vertexToAddId;
 			}
 		}
 	}
 }
 
-void reserveVertices(int* verticesToAdd, bool* canAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum)
+void reserveVertices(
+	int* verticesToAdd, bool* canAdd, int verticesToAddNum,
+	int* triangles, int* trianglesReservations, int trianglesNum,
+	float2* allVertices, int* verticesReservations, int allVerticesNum)
 {
 	// Print data for tests
 
@@ -115,6 +124,7 @@ void reserveVertices(int* verticesToAdd, bool* canAdd, int verticesToAddNum, int
 	int* d_verticesToAdd;
 	bool* d_canAdd;
 	int* d_triangles;
+	int* d_trianglesReservations;
 	float2* d_allVertices;
 	int* d_verticesReservations;
 
@@ -127,23 +137,30 @@ void reserveVertices(int* verticesToAdd, bool* canAdd, int verticesToAddNum, int
 	cudaMalloc(&d_verticesToAdd, verticesToAddSize);
 	cudaMalloc(&d_canAdd, canAddSize);
 	cudaMalloc(&d_triangles, trianglesSize);
+	cudaMalloc(&d_trianglesReservations, trianglesSize);
 	cudaMalloc(&d_allVertices, allVerticesSize);
 	cudaMalloc(&d_verticesReservations, verticesReservationsSize);
 
 	cudaMemcpy(d_verticesToAdd, verticesToAdd, verticesToAddSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_triangles, triangles, trianglesSize, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_trianglesReservations, trianglesReservations, trianglesSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_allVertices, allVertices, allVerticesSize, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_verticesReservations, verticesReservations, verticesReservationsSize, cudaMemcpyHostToDevice);
 
-	reserveVerticesDevice KERNEL_ARGS2(1, 1)(d_verticesToAdd, d_canAdd, verticesToAddNum, d_triangles, trianglesNum, d_allVertices, d_verticesReservations, allVerticesNum);
+	reserveVerticesDevice KERNEL_ARGS2(1, 1)(
+		d_verticesToAdd, d_canAdd, verticesToAddNum,
+		d_triangles, d_trianglesReservations, trianglesNum,
+		d_allVertices, d_verticesReservations, allVerticesNum);
 
 	cudaMemcpy(verticesReservations, d_verticesReservations, verticesReservationsSize, cudaMemcpyDeviceToHost);
+	cudaMemcpy(trianglesReservations, d_trianglesReservations, trianglesSize, cudaMemcpyDeviceToHost);
 	cudaMemcpy(canAdd, d_canAdd, canAddSize, cudaMemcpyDeviceToHost);
 
 	// Print results for tests
 
-	printf("Vertices reservations:\n");
+	/*printf("Vertices reservations:\n");
 	for (int i = 0; i < allVerticesNum; i++)
-		printf("%d: %d\n", i, verticesReservations[i]);
+		printf("%d: %d\n", i, verticesReservations[i]);*/
 }
 
 void insertVertices()
@@ -201,6 +218,7 @@ namespace dtc
 		_triangles.push_back(TriangleType(p1, p2, p3, p1_id, p2_id, p3_id));
 
 		std::vector<int> triangles;
+		triangles.reserve(3 * _triangles.size());
 		for (auto& triangle : _triangles)
 		{
 			triangles.push_back(triangle.a_id);
@@ -209,88 +227,104 @@ namespace dtc
 		}
 
 		int* verticesReservations = new int[_vertices.size()];
-		std::fill_n(verticesReservations, _vertices.size(), -1);
+		int* trianglesReservations = new int[triangles.size()];
+		bool* canAdd;
 
-		bool* canAdd = new bool[_vertices.size()];
-
-		reserveVertices(&verticesToAdd[0], canAdd, verticesToAdd.size(), &triangles[0], triangles.size(), &_vertices[0], verticesReservations, _vertices.size());
-		
-		// TODO: WAIT FOR THE RESULTS!
-		//insertVertices();
-
-		// Maybe it would be better to make reservations on triangles-like array?
-		for (int i = 0; i < verticesToAdd.size(); i++)
+		while (!verticesToAdd.empty())
 		{
-			// has vertex access to all affected triangles?
-			if (!canAdd[i])
-				continue;
+			canAdd = new bool[verticesToAdd.size()];
 
-			// get all reservations
-			int vertexToAdd = verticesToAdd[i];
-			std::vector<int> reservations;
-			for (int j = 0; j < _vertices.size(); j++)
+			std::fill_n(verticesReservations, _vertices.size(), -1);
+			std::fill_n(trianglesReservations, triangles.size(), -1);
+
+			reserveVertices(
+				&verticesToAdd[0], canAdd, verticesToAdd.size(),
+				&triangles[0], trianglesReservations, triangles.size(),
+				&_vertices[0], verticesReservations, _vertices.size());
+
+			//insertVertices();
+
+			std::vector<int> idsToRemove;
+			for (int i = 0; i < verticesToAdd.size(); i++)
 			{
-				int vertex = verticesReservations[j];
-				if (vertex == vertexToAdd)
-					reservations.push_back(j);
-			}
+				// has vertex access to all affected triangles?
+				if (!canAdd[i])
+					continue;
 
-			// create polygon
-			std::vector<Edge> polygon;
-			for (int i = 0; i < triangles.size(); i += 3)
-			{
-				bool isReservedA = false;
-				bool isReservedB = false;
-				bool isReservedC = false;
-				int a = triangles[i];
-				int b = triangles[i + 1];
-				int c = triangles[i + 2];
-				
-				for (int j = 0; j < reservations.size(); j++)
-				{
-					if (reservations[j] == a)
-						isReservedA = true;
-					if (reservations[j] == b)
-						isReservedB = true;
-					if (reservations[j] == c)
-						isReservedC = true;
-				}
+				idsToRemove.push_back(i);
 
-				if (isReservedA && isReservedB && isReservedC)
-				{
-					polygon.push_back(Edge{_vertices[a], _vertices[b], a, b});
-					polygon.push_back(Edge{_vertices[b], _vertices[c], b, c});
-					polygon.push_back(Edge{_vertices[c], _vertices[a], c, a});
-				}
-			}
+				int vertexToAdd = verticesToAdd[i];
+				std::vector<Edge> polygon;
+				std::vector<int> trisToRemove;
 
-			for (auto e1 = polygon.begin(); e1 != polygon.end(); ++e1)
-			{
-				for (auto e2 = e1 + 1; e2 != polygon.end(); ++e2)
+				for (int t = 0; t < triangles.size(); t += 3)
 				{
-					if (almost_equal(*e1, *e2))
+					int a = triangles[t];
+					int b = triangles[t + 1];
+					int c = triangles[t + 2];
+					int aReservation = trianglesReservations[t];
+					int bReservation = trianglesReservations[t + 1];
+					int cReservation = trianglesReservations[t + 2];
+
+					if (aReservation == bReservation && bReservation == cReservation && cReservation == vertexToAdd)
 					{
-						e1->isBad = true;
-						e2->isBad = true;
+						_triangles[t / 3].isBad = true;
+
+						trisToRemove.push_back(t);
+						trisToRemove.push_back(t + 1);
+						trisToRemove.push_back(t + 2);
+						polygon.push_back(Edge{_vertices[a], _vertices[b], a, b});
+						polygon.push_back(Edge{_vertices[b], _vertices[c], b, c});
+						polygon.push_back(Edge{_vertices[c], _vertices[a], c, a});
 					}
 				}
+
+				for (int r = trisToRemove.size() - 1; r >= 0; r--)
+					triangles.erase(triangles.begin() + trisToRemove[r]);
+
+				_triangles.erase(
+					std::remove_if(_triangles.begin(), _triangles.end(),
+								   [](TriangleType& t) {
+									   return t.isBad;
+								   }), _triangles.end());
+
+				for (auto e1 = polygon.begin(); e1 != polygon.end(); ++e1)
+				{
+					for (auto e2 = e1 + 1; e2 != polygon.end(); ++e2)
+					{
+						if (almost_equal(*e1, *e2))
+						{
+							e1->isBad = true;
+							e2->isBad = true;
+						}
+					}
+				}
+
+				polygon.erase(
+					std::remove_if(polygon.begin(), polygon.end(),
+								   [](Edge& e) {
+									   return e.isBad;
+								   }), end(polygon));
+
+				for (const auto edge : polygon)
+				{
+					_triangles.push_back(Triangle(*edge.v, *edge.w, _vertices[vertexToAdd], edge.v_id, edge.w_id, vertexToAdd));
+
+					triangles.push_back(edge.v_id);
+					triangles.push_back(edge.w_id);
+					triangles.push_back(vertexToAdd);
+				}
 			}
 
-			polygon.erase(
-				std::remove_if(polygon.begin(), polygon.end(),
-							   [](Edge& e) {
-								   return e.isBad;
-							   }), end(polygon));
-
-			for (const auto edge : polygon)
-				_triangles.push_back(Triangle(*edge.v, *edge.w, _vertices[vertexToAdd], edge.v_id, edge.w_id, vertexToAdd));
+			for (int i = idsToRemove.size() - 1; i >= 0; i--)
+				verticesToAdd.erase(verticesToAdd.begin() + idsToRemove[i]);
 		}
 
-		/*_triangles.erase(
+		_triangles.erase(
 			std::remove_if(_triangles.begin(), _triangles.end(),
 							[p1, p2, p3](Triangle& t) {
 								return t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
-							}), _triangles.end());*/
+							}), _triangles.end());
 
 		for (const auto triangle : _triangles)
 		{
@@ -298,70 +332,11 @@ namespace dtc
 			_edges.push_back(Edge(*triangle.b, * triangle.c, triangle.b_id, triangle.c_id));
 			_edges.push_back(Edge(*triangle.c, * triangle.a, triangle.c_id, triangle.a_id));
 		}
-		// if (canAdd[i])
-		//   get polygon
-		//   make triangles from polygon edges and added vertex
 
 		// Vertex can be inserted ONLY if all affected triangles have its id.
 			// So it has to be checked in reserveVertices probably
 		// Insert vertices on host as I don't have any idea how to make it faster on device as we have to insert new triangles (creating new objects dynamically)
 		// Remove added vertices and repeat the process for not yet added vertices
-
-		/*for (auto vertex = vertices.begin(); vertex != vertices.end(); vertex++)
-		{
-			std::vector<EdgeType> polygon;
-
-			for (auto& triangle : _triangles)
-			{
-				if (triangle.circumCircleContains(*vertex))
-				{
-					triangle.isBad = true;
-					polygon.push_back(Edge<float>{*triangle.a, * triangle.b});
-					polygon.push_back(Edge<float>{*triangle.b, * triangle.c});
-					polygon.push_back(Edge<float>{*triangle.c, * triangle.a});
-				}
-			}
-
-			_triangles.erase(
-				std::remove_if(_triangles.begin(), _triangles.end(),
-							   [](TriangleType& t) {
-								   return t.isBad;
-							   }), _triangles.end());
-
-			for (auto e1 = polygon.begin(); e1 != polygon.end(); ++e1)
-			{
-				for (auto e2 = e1 + 1; e2 != polygon.end(); ++e2)
-				{
-					if (almost_equal(*e1, *e2))
-					{
-						e1->isBad = true;
-						e2->isBad = true;
-					}
-				}
-			}
-
-			polygon.erase(
-				std::remove_if(polygon.begin(), polygon.end(),
-							   [](EdgeType& e) {
-								   return e.isBad;
-							   }), end(polygon));
-
-			for (const auto edge : polygon)
-				_triangles.push_back(TriangleType(*edge.v, *edge.w, *vertex));
-		}
-
-		_triangles.erase(
-			std::remove_if(_triangles.begin(), _triangles.end(),
-						   [p1, p2, p3](TriangleType& t) {
-							   return t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
-						   }), _triangles.end());
-
-		for (const auto triangle : _triangles)
-		{
-			_edges.push_back(Edge<float>{*triangle.a, * triangle.b});
-			_edges.push_back(Edge<float>{*triangle.b, * triangle.c});
-			_edges.push_back(Edge<float>{*triangle.c, * triangle.a});
-		}*/
 
 		return _triangles;
 	}

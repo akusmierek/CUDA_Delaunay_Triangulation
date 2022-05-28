@@ -29,28 +29,28 @@ __global__ void addKernel(int *c, const int *a, const int *b)
 
 int main()
 {
-    const int arraySize = 5;
-    const int a[arraySize] = { 1, 2, 3, 4, 5 };
-    const int b[arraySize] = { 10, 20, 30, 40, 50 };
-    int c[arraySize] = { 0 };
+    //const int arraySize = 5;
+    //const int a[arraySize] = { 1, 2, 3, 4, 5 };
+    //const int b[arraySize] = { 10, 20, 30, 40, 50 };
+    //int c[arraySize] = { 0 };
 
-    // Add vectors in parallel.
-    cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addWithCuda failed!");
-        return 1;
-    }
+    //// Add vectors in parallel.
+    //cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
+    //if (cudaStatus != cudaSuccess) {
+    //    fprintf(stderr, "addWithCuda failed!");
+    //    return 1;
+    //}
 
-    printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-        c[0], c[1], c[2], c[3], c[4]);
+    //printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
+    //    c[0], c[1], c[2], c[3], c[4]);
 
-    // cudaDeviceReset must be called before exiting in order for profiling and
-    // tracing tools such as Nsight and Visual Profiler to show complete traces.
-    cudaStatus = cudaDeviceReset();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceReset failed!");
-        return 1;
-    }
+    //// cudaDeviceReset must be called before exiting in order for profiling and
+    //// tracing tools such as Nsight and Visual Profiler to show complete traces.
+    //cudaStatus = cudaDeviceReset();
+    //if (cudaStatus != cudaSuccess) {
+    //    fprintf(stderr, "cudaDeviceReset failed!");
+    //    return 1;
+    //}
 
 
     ///////////////////
@@ -71,11 +71,13 @@ int main()
         printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
     }
 
+    printf("\n\n");
+
     std::vector<float2> cudaPoints;
     cudaPoints.push_back(make_float2(0, 2));
     cudaPoints.push_back(make_float2(1, 0));
     cudaPoints.push_back(make_float2(0, -2));
-    cudaPoints.push_back(make_float2(-1, 0));
+    cudaPoints.push_back(make_float2(-10, 0));
     cudaPoints.push_back(make_float2(2, 2));
 
     dtc::DelaunayCuda triangulationCuda;
