@@ -9,6 +9,7 @@
 #include <vector>
 #include <algorithm>
 
+__host__ __device__ bool circumCircleContains(const float2 a, const float2 b, const float2 c, const float2 v);
 __global__ void reserveVerticesDevice(void);
 
 void reserveVertices(float2* verticesToAdd, int verticesToAddNum, int* triangles, int trianglesNum, float2* allVertices, int* verticesReservations, int allVerticesNum);

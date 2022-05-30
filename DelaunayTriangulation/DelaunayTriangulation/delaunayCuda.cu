@@ -12,7 +12,7 @@
 #define KERNEL_ARGS4(grid, block, sh_mem, stream)
 #endif
 
-__device__ bool circumCircleContains(const float2 a, const float2 b, const float2 c, const float2 v)
+__host__ __device__ bool circumCircleContains(const float2 a, const float2 b, const float2 c, const float2 v)
 {
 	const float ab = a.x * a.x + a.y * a.y;
 	const float cd = b.x * b.x + b.y * b.y;
@@ -107,20 +107,6 @@ void reserveVertices(
 	int* triangles, int* trianglesReservations, int trianglesNum,
 	float2* allVertices, int* verticesReservations, int allVerticesNum)
 {
-	// Print data for tests
-
-	/*printf("Vertices to add:\n");
-	for (int i = 0; i < verticesToAddNum; i++)
-		printf("(%f, %f)\n", verticesToAdd[i].x, verticesToAdd[i].y);
-
-	printf("Triangles:\n");
-	for (int i = 0; i < trianglesNum; i += 3)
-		printf("(%d, %d, %d)\n", triangles[i], triangles[i + 1], triangles[i + 2]);
-
-	printf("All vertices:\n");
-	for (int i = 0; i < allVerticesNum; i++)
-		printf("(%f, %f)\n", allVertices[i].x, allVertices[i].y);*/
-
 	int* d_verticesToAdd;
 	bool* d_canAdd;
 	int* d_triangles;
@@ -156,16 +142,12 @@ void reserveVertices(
 	cudaMemcpy(trianglesReservations, d_trianglesReservations, trianglesSize, cudaMemcpyDeviceToHost);
 	cudaMemcpy(canAdd, d_canAdd, canAddSize, cudaMemcpyDeviceToHost);
 
-	// Print results for tests
-
-	/*printf("Vertices reservations:\n");
-	for (int i = 0; i < allVerticesNum; i++)
-		printf("%d: %d\n", i, verticesReservations[i]);*/
-}
-
-void insertVertices()
-{
-
+	cudaFree(d_verticesToAdd);
+	cudaFree(d_canAdd);
+	cudaFree(d_triangles);
+	cudaFree(d_trianglesReservations);
+	cudaFree(d_allVertices);
+	cudaFree(d_verticesReservations);
 }
 
 namespace dtc
@@ -233,6 +215,7 @@ namespace dtc
 		while (!verticesToAdd.empty())
 		{
 			canAdd = new bool[verticesToAdd.size()];
+			int* trianglesReservations = new int[triangles.size()];
 
 			std::fill_n(verticesReservations, _vertices.size(), -1);
 			std::fill_n(trianglesReservations, triangles.size(), -1);
@@ -241,8 +224,6 @@ namespace dtc
 				&verticesToAdd[0], canAdd, verticesToAdd.size(),
 				&triangles[0], trianglesReservations, triangles.size(),
 				&_vertices[0], verticesReservations, _vertices.size());
-
-			//insertVertices();
 
 			std::vector<int> idsToRemove;
 			for (int i = 0; i < verticesToAdd.size(); i++)
@@ -318,6 +299,9 @@ namespace dtc
 
 			for (int i = idsToRemove.size() - 1; i >= 0; i--)
 				verticesToAdd.erase(verticesToAdd.begin() + idsToRemove[i]);
+
+			delete[] canAdd;
+			delete[] trianglesReservations;
 		}
 
 		_triangles.erase(
@@ -332,11 +316,8 @@ namespace dtc
 			_edges.push_back(Edge(*triangle.b, * triangle.c, triangle.b_id, triangle.c_id));
 			_edges.push_back(Edge(*triangle.c, * triangle.a, triangle.c_id, triangle.a_id));
 		}
-
-		// Vertex can be inserted ONLY if all affected triangles have its id.
-			// So it has to be checked in reserveVertices probably
-		// Insert vertices on host as I don't have any idea how to make it faster on device as we have to insert new triangles (creating new objects dynamically)
-		// Remove added vertices and repeat the process for not yet added vertices
+		
+		delete[] verticesReservations;
 
 		return _triangles;
 	}

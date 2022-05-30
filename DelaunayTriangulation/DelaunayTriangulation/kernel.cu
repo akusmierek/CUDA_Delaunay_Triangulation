@@ -1,10 +1,11 @@
 ﻿
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
-#include "delaunay.h"
-
+#include <chrono>
 #include <stdio.h>
+
+#include "cuda_runtime.h"
+#include "delaunay.h"
 #include "delaunayCuda.cuh"
+#include "device_launch_parameters.h"
 
 // nvcc does not seem to like variadic macros, so we have to define
 // one for each kernel parameter list:
@@ -18,169 +19,125 @@
 #define KERNEL_ARGS4(grid, block, sh_mem, stream)
 #endif
 
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-cudaError_t triangulateWithCuda();
-
-__global__ void addKernel(int *c, const int *a, const int *b)
-{
-    int i = threadIdx.x;
-    c[i] = a[i] + b[i];
-}
-
 int main()
 {
-    //const int arraySize = 5;
-    //const int a[arraySize] = { 1, 2, 3, 4, 5 };
-    //const int b[arraySize] = { 10, 20, 30, 40, 50 };
-    //int c[arraySize] = { 0 };
-
-    //// Add vectors in parallel.
-    //cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "addWithCuda failed!");
-    //    return 1;
-    //}
-
-    //printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-    //    c[0], c[1], c[2], c[3], c[4]);
-
-    //// cudaDeviceReset must be called before exiting in order for profiling and
-    //// tracing tools such as Nsight and Visual Profiler to show complete traces.
-    //cudaStatus = cudaDeviceReset();
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "cudaDeviceReset failed!");
-    //    return 1;
-    //}
-
-
-    ///////////////////
-    // TRIANGULATION //
-    ///////////////////
-    std::vector<dt::Vector2<float>> points;
-    points.push_back(dt::Vector2<float>{0, 2});
-    points.push_back(dt::Vector2<float>{1, 0});
-    points.push_back(dt::Vector2<float>{0, -2});
-    points.push_back(dt::Vector2<float>{-10, 0});
-    points.push_back(dt::Vector2<float>{2, 2});
-
-    dt::Delaunay<float> triangulation;
-    const std::vector<dt::Triangle<float>> triangles = triangulation.triangulate(points);
-    const std::vector<dt::Edge<float>> edges = triangulation.getEdges();
-    for (const auto& e : edges)
-    {
-        printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
-    }
-
-    printf("\n\n");
-
-    std::vector<float2> cudaPoints;
-    cudaPoints.push_back(make_float2(0, 2));
-    cudaPoints.push_back(make_float2(1, 0));
-    cudaPoints.push_back(make_float2(0, -2));
-    cudaPoints.push_back(make_float2(-10, 0));
-    cudaPoints.push_back(make_float2(2, 2));
-
-    dtc::DelaunayCuda triangulationCuda;
-    const std::vector<dtc::Triangle> trianglesCuda = triangulationCuda.triangulate(cudaPoints);
-    const std::vector<dtc::Edge> edgesCuda = triangulationCuda.getEdges();
-    for (const auto& e : edgesCuda)
-    {
-        printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
-    }
-
-    cudaError_t triangulationCudaStatus = triangulateWithCuda();
-    if (triangulationCudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "triangulationWithCuda failed!");
-        return 1;
-    }
-
-    return 0;
-}
-
-// Helper function for using CUDA to add vectors in parallel.
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
-{
-    int *dev_a = 0;
-    int *dev_b = 0;
-    int *dev_c = 0;
     cudaError_t cudaStatus;
 
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
-    if (cudaStatus != cudaSuccess) {
+    if (cudaStatus != cudaSuccess)
+    {
         fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-        goto Error;
     }
 
-    // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
+    std::vector<dt::Vector2<float>> points;
+    std::vector<float2> cudaPoints;
+
+    srand(static_cast<unsigned>(time(0)));
+
+    for (size_t i = 0; i < 100; i++)
+    {
+        float x = static_cast<float>(rand()) / static_cast<float>(RAND_MAX / 100);
+        float y = static_cast<float>(rand()) / static_cast<float>(RAND_MAX / 100);
+        points.push_back(dt::Vector2<float>{x, y});
+        cudaPoints.push_back(make_float2(x, y));
     }
 
-    cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
+    dt::Delaunay<float> triangulation;
+    
+    auto t1_host = std::chrono::high_resolution_clock::now();
+    const std::vector<dt::Triangle<float>> triangles = triangulation.triangulate(points);
+    auto t2_host = std::chrono::high_resolution_clock::now();
+
+    const std::vector<dt::Edge<float>> edges = triangulation.getEdges();
+    /*for (const auto& e : edges)
+    {
+        printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
+    }*/
+
+    bool isTriangulationOk = true;
+    for (const auto& triangle : triangles)
+    {
+        for (size_t i = 0; i < points.size(); i++)
+        {
+            auto a = make_float2(triangle.a->x, triangle.a->y);
+            auto b = make_float2(triangle.b->x, triangle.b->y);
+            auto c = make_float2(triangle.c->x, triangle.c->y);
+            auto v = make_float2(points[i].x, points[i].y);
+            if (!dtc::almost_equal(a, v) && !dtc::almost_equal(b, v) && !dtc::almost_equal(c, v))
+            {
+                if (circumCircleContains(a, b, c, v))
+                {
+                    isTriangulationOk = false;
+                    break;
+                }
+            }
+        }
     }
 
-    cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
+    std::cout << "Triangulation: " << isTriangulationOk << std::endl;
 
-    // Copy input vectors from host memory to GPU buffers.
-    cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
+    printf("\n\n");
 
-    cudaStatus = cudaMemcpy(dev_b, b, size * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-
-    // Launch a kernel on the GPU with one thread for each element.
-    addKernel KERNEL_ARGS2(1, size) (dev_c, dev_a, dev_b);
+    dtc::DelaunayCuda triangulationCuda;
+    
+    auto t1_device = std::chrono::high_resolution_clock::now();
+    const std::vector<dtc::Triangle> trianglesCuda = triangulationCuda.triangulate(cudaPoints);
+    auto t2_device = std::chrono::high_resolution_clock::now();
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        goto Error;
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "Kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
     }
-    
+
     // cudaDeviceSynchronize waits for the kernel to finish, and returns
     // any errors encountered during the launch.
     cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess) {
+    if (cudaStatus != cudaSuccess)
+    {
         fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-        goto Error;
     }
 
-    // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
+    bool isTriangulationCudaOk = true;
+    for (const auto& triangle : triangles)
+    {
+        for (size_t i = 0; i < cudaPoints.size(); i++)
+        {
+            auto a = make_float2(triangle.a->x, triangle.a->y);
+            auto b = make_float2(triangle.b->x, triangle.b->y);
+            auto c = make_float2(triangle.c->x, triangle.c->y);
+            auto v = cudaPoints[i];
+            if (!dtc::almost_equal(a, v) && !dtc::almost_equal(b, v) && !dtc::almost_equal(c, v))
+            {
+                if (circumCircleContains(a, b, c, v))
+                {
+                    isTriangulationCudaOk = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    std::cout << "Triangulation: " << isTriangulationCudaOk << std::endl;
+
+    const std::vector<dtc::Edge> edgesCuda = triangulationCuda.getEdges();
+    /*for (const auto& e : edgesCuda)
+    {
+        printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
+    }*/
+
+    printf("Host execution time: %d ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(t2_host - t1_host).count());
+    printf("Device execution time: %d ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(t2_device - t1_device).count());
+
+    // cudaDeviceReset must be called before exiting in order for profiling and
+    // tracing tools such as Nsight and Visual Profiler to show complete traces.
+    cudaStatus = cudaDeviceReset();
     if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
+        fprintf(stderr, "cudaDeviceReset failed!");
+        return 1;
     }
 
-Error:
-    cudaFree(dev_c);
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-    
-    return cudaStatus;
-}
-
-cudaError_t triangulateWithCuda()
-{
-    cudaError_t cudaStatus;
-    cudaStatus = cudaSetDevice(0);
-    return cudaStatus;
+    return 0;
 }
