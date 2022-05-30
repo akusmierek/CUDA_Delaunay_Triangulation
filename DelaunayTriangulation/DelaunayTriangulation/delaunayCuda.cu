@@ -43,102 +43,82 @@ __host__ __device__ bool circumCircleContains(const float2 a, const float2 b, co
 __global__ void reserveVerticesDevice(
 	int* verticesToAdd, bool* canAdd, int verticesToAddNum,
 	int* triangles, int* trianglesReservations, int trianglesNum,
-	float2* allVertices, int* verticesReservations, int allVerticesNum)
+	float2* allVertices, int allVerticesNum)
 {
-	for (int i = 0; i < verticesToAddNum; i++)
-	{
-		int vertexToAddId = verticesToAdd[i];
-		float2 vertexToAdd = allVertices[vertexToAddId];
-		for (int j = 0; j < trianglesNum; j += 3)
-		{
-			int a_id = triangles[j];
-			int b_id = triangles[j + 1];
-			int c_id = triangles[j + 2];
-			float2 a = allVertices[a_id];
-			float2 b = allVertices[b_id];
-			float2 c = allVertices[c_id];
+	int i = threadIdx.x;
 
-			if (circumCircleContains(a, b, c, vertexToAdd))
-			{
-				atomicMax(&verticesReservations[a_id], vertexToAddId);
-				atomicMax(&verticesReservations[b_id], vertexToAddId);
-				atomicMax(&verticesReservations[c_id], vertexToAddId);
-			}
+	bool* reservations = (bool*)malloc(trianglesNum * sizeof(bool));
+	memset(reservations, 0, trianglesNum * sizeof(bool));
+
+	int vertexToAddId = verticesToAdd[i];
+	float2 vertexToAdd = allVertices[vertexToAddId];
+	for (int j = 0; j < trianglesNum; j += 3)
+	{
+		int a_id = triangles[j];
+		int b_id = triangles[j + 1];
+		int c_id = triangles[j + 2];
+		float2 a = allVertices[a_id];
+		float2 b = allVertices[b_id];
+		float2 c = allVertices[c_id];
+
+		if (circumCircleContains(a, b, c, vertexToAdd))
+		{
+			atomicMax(&trianglesReservations[j], vertexToAddId);
+			atomicMax(&trianglesReservations[j + 1], vertexToAddId);
+			atomicMax(&trianglesReservations[j + 2], vertexToAddId);
+			reservations[j] = true;
+			reservations[j + 1] = true;
+			reservations[j + 2] = true;
 		}
 	}
 
-	// I hope it can be done better than calculating the same thing 2 times...
 	__syncthreads();
 
-	for (int i = 0; i < verticesToAddNum; i++)
+	for (int j = 0; j < trianglesNum; j++)
 	{
-		int vertexToAddId = verticesToAdd[i];
-		float2 vertexToAdd = allVertices[vertexToAddId];
-		for (int j = 0; j < trianglesNum; j += 3)
+		if (reservations[j] && trianglesReservations[j] != vertexToAddId)
 		{
-			int a_id = triangles[j];
-			int b_id = triangles[j + 1];
-			int c_id = triangles[j + 2];
-			float2 a = allVertices[a_id];
-			float2 b = allVertices[b_id];
-			float2 c = allVertices[c_id];
-
-			if (circumCircleContains(a, b, c, vertexToAdd))
-			{
-				if (verticesReservations[a_id] != vertexToAddId ||
-					verticesReservations[b_id] != vertexToAddId ||
-					verticesReservations[c_id] != vertexToAddId)
-				{
-					canAdd[i] = false;
-					break;
-				}
-
-				canAdd[i] = true;
-				trianglesReservations[j] = vertexToAddId;
-				trianglesReservations[j + 1] = vertexToAddId;
-				trianglesReservations[j + 2] = vertexToAddId;
-			}
+			canAdd[i] = false;
+			break;
 		}
 	}
+
+	free(reservations);
 }
 
 void reserveVertices(
 	int* verticesToAdd, bool* canAdd, int verticesToAddNum,
 	int* triangles, int* trianglesReservations, int trianglesNum,
-	float2* allVertices, int* verticesReservations, int allVerticesNum)
+	float2* allVertices, int allVerticesNum)
 {
 	int* d_verticesToAdd;
 	bool* d_canAdd;
 	int* d_triangles;
 	int* d_trianglesReservations;
 	float2* d_allVertices;
-	int* d_verticesReservations;
 
 	size_t verticesToAddSize = sizeof(int) * verticesToAddNum;
 	size_t canAddSize = sizeof(bool) * verticesToAddNum;
 	size_t trianglesSize = sizeof(int) * trianglesNum;
 	size_t allVerticesSize = sizeof(float2) * allVerticesNum;
-	size_t verticesReservationsSize = sizeof(int) * allVerticesNum;
 
 	cudaMalloc(&d_verticesToAdd, verticesToAddSize);
 	cudaMalloc(&d_canAdd, canAddSize);
+	cudaMemset(d_canAdd, 1, canAddSize);
 	cudaMalloc(&d_triangles, trianglesSize);
 	cudaMalloc(&d_trianglesReservations, trianglesSize);
 	cudaMalloc(&d_allVertices, allVerticesSize);
-	cudaMalloc(&d_verticesReservations, verticesReservationsSize);
 
 	cudaMemcpy(d_verticesToAdd, verticesToAdd, verticesToAddSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_triangles, triangles, trianglesSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_trianglesReservations, trianglesReservations, trianglesSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_allVertices, allVertices, allVerticesSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_verticesReservations, verticesReservations, verticesReservationsSize, cudaMemcpyHostToDevice);
 
-	reserveVerticesDevice KERNEL_ARGS2(1, 1)(
+	reserveVerticesDevice KERNEL_ARGS2(1, verticesToAddNum)(
 		d_verticesToAdd, d_canAdd, verticesToAddNum,
 		d_triangles, d_trianglesReservations, trianglesNum,
-		d_allVertices, d_verticesReservations, allVerticesNum);
+		d_allVertices, allVerticesNum);
 
-	cudaMemcpy(verticesReservations, d_verticesReservations, verticesReservationsSize, cudaMemcpyDeviceToHost);
 	cudaMemcpy(trianglesReservations, d_trianglesReservations, trianglesSize, cudaMemcpyDeviceToHost);
 	cudaMemcpy(canAdd, d_canAdd, canAddSize, cudaMemcpyDeviceToHost);
 
@@ -147,7 +127,6 @@ void reserveVertices(
 	cudaFree(d_triangles);
 	cudaFree(d_trianglesReservations);
 	cudaFree(d_allVertices);
-	cudaFree(d_verticesReservations);
 }
 
 namespace dtc
@@ -208,7 +187,6 @@ namespace dtc
 			triangles.push_back(triangle.c_id);
 		}
 
-		int* verticesReservations = new int[_vertices.size()];
 		int* trianglesReservations = new int[triangles.size()];
 		bool* canAdd;
 
@@ -217,15 +195,15 @@ namespace dtc
 			canAdd = new bool[verticesToAdd.size()];
 			int* trianglesReservations = new int[triangles.size()];
 
-			std::fill_n(verticesReservations, _vertices.size(), -1);
 			std::fill_n(trianglesReservations, triangles.size(), -1);
 
 			reserveVertices(
 				&verticesToAdd[0], canAdd, verticesToAdd.size(),
 				&triangles[0], trianglesReservations, triangles.size(),
-				&_vertices[0], verticesReservations, _vertices.size());
+				&_vertices[0],  _vertices.size());
 
 			std::vector<int> idsToRemove;
+			size_t trianglesReservationsSize = triangles.size();
 			for (int i = 0; i < verticesToAdd.size(); i++)
 			{
 				// has vertex access to all affected triangles?
@@ -238,7 +216,7 @@ namespace dtc
 				std::vector<Edge> polygon;
 				std::vector<int> trisToRemove;
 
-				for (int t = 0; t < triangles.size(); t += 3)
+				for (int t = 0; t < triangles.size() && t < trianglesReservationsSize; t += 3)
 				{
 					int a = triangles[t];
 					int b = triangles[t + 1];
@@ -316,8 +294,6 @@ namespace dtc
 			_edges.push_back(Edge(*triangle.b, * triangle.c, triangle.b_id, triangle.c_id));
 			_edges.push_back(Edge(*triangle.c, * triangle.a, triangle.c_id, triangle.a_id));
 		}
-		
-		delete[] verticesReservations;
 
 		return _triangles;
 	}
