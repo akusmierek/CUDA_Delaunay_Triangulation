@@ -75,7 +75,7 @@ namespace dt
 								   return e.isBad;
 							   }), end(polygon));
 
-			for (const auto edge : polygon)
+			for (const auto& edge : polygon)
 				_triangles.push_back(TriangleType(*edge.v, *edge.w, *vertex));
 		}
 
@@ -85,7 +85,7 @@ namespace dt
 							   return t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
 						   }), _triangles.end());
 
-		for (const auto triangle : _triangles)
+		for (const auto& triangle : _triangles)
 		{
 			_edges.push_back(Edge<T>{*triangle.a, * triangle.b});
 			_edges.push_back(Edge<T>{*triangle.b, * triangle.c});

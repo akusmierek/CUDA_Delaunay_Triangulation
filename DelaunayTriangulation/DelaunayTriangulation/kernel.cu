@@ -128,8 +128,8 @@ int main()
         printf("edge from (%f, %f) to (%f, %f)\n", e.v->x, e.v->y, e.w->x, e.w->y);
     }*/
 
-    printf("Host execution time: %d ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(t2_host - t1_host).count());
-    printf("Device execution time: %d ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(t2_device - t1_device).count());
+    std::cout << "Host execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2_host - t1_host).count() << " ms" << std::endl;
+    std::cout << "Device execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2_device - t1_device).count() << " ms" << std::endl;
 
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
