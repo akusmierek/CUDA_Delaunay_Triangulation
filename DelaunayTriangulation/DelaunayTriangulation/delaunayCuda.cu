@@ -1,4 +1,5 @@
 #include "delaunayCuda.cuh"
+#include <thrust\device_vector.h>
 
 // nvcc does not seem to like variadic macros, so we have to define
 // one for each kernel parameter list:
@@ -119,7 +120,19 @@ void reserveVertices(
 		d_trianglesVertices, d_trianglesReservations, static_cast<int>(trianglesVerticesNum),
 		d_allVertices, static_cast<int>(allVerticesNum));
 
+
+	cudaEvent_t startEvent, stopEvent;
+	cudaEventCreate(&startEvent);
+	cudaEventCreate(&stopEvent);
+	cudaDeviceSynchronize();
+	cudaEventRecord(startEvent, 0);
 	cudaMemcpy(trianglesReservations, d_trianglesReservations, trianglesSize, cudaMemcpyDeviceToHost);
+	cudaEventRecord(stopEvent, 0);
+	cudaEventSynchronize(stopEvent);
+	float time;
+	cudaEventElapsedTime(&time, startEvent, stopEvent);
+	std::cout << "Device to Host bandwidth (GB/s): " << trianglesSize * 1e-6 / time << " (" << trianglesSize * 1e-6 << "/" << time << ")" << std::endl;
+
 	cudaMemcpy(canAdd, d_canAdd, canAddSize, cudaMemcpyDeviceToHost);
 
 	cudaFree(d_verticesToAdd);
@@ -197,7 +210,8 @@ namespace dtc
 		{
 			canAdd = new bool[verticesToAdd.size()];
 			size_t trianglesReservationsSize = trianglesVertices.size() / 3;
-			trianglesReservations = new int[trianglesReservationsSize];
+			//trianglesReservations = (int*)malloc(trianglesReservationsSize * sizeof(int));
+			cudaMallocHost((void**)&trianglesReservations, trianglesReservationsSize * sizeof(int));
 
 			reserveVertices(
 				verticesToAdd.data(), canAdd, verticesToAdd.size(),
@@ -278,7 +292,8 @@ namespace dtc
 				verticesToAdd.erase(verticesToAdd.begin() + idsToRemove[i]);
 
 			delete[] canAdd;
-			delete[] trianglesReservations;
+			cudaFreeHost(trianglesReservations);
+			//delete[] trianglesReservations;
 		}
 
 		_triangles.erase(

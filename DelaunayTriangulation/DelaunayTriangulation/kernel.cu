@@ -30,12 +30,17 @@ int main()
         fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
     }
 
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    printf("\nDevice: %s\n", prop.name);
+
     std::vector<dt::Vector2<float>> points;
     std::vector<float2> cudaPoints;
 
     srand(static_cast<unsigned>(time(0)));
 
-    for (size_t i = 0; i < 100; i++)
+    for (size_t i = 0; i < 1000; i++)
     {
         float x = static_cast<float>(rand()) / static_cast<float>(RAND_MAX / 100);
         float y = static_cast<float>(rand()) / static_cast<float>(RAND_MAX / 100);
